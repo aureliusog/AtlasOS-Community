@@ -6,6 +6,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 4L16 22L6 22Z' fill='%23e06c75'/%3E%3Cpath d='M16 8L16 22L24 22Z' fill='%23e06c75' opacity='0.6'/%3E%3Cpath d='M4 24Q10 20 16 24Q22 28 28 24' stroke='%23e06c75' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#282c34">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Disable iOS / Android auto-linkifying of numbers (phone/date/address)
@@ -948,6 +949,10 @@
   <section id="atlas-home" class="atlas-home atlas-mc" aria-label="Atlas OS Mission Control">
     <header class="atlas-mc-briefing-bar" id="atlas-home-briefing" aria-labelledby="atlas-home-briefing-heading">
       <span id="atlas-home-briefing-heading" class="atlas-mc-briefing-label">Daily Briefing</span>
+      <button type="button" id="atlas-voice-status-chip" class="atlas-voice-status-chip" data-status="idle" title="Voice status — click for settings" aria-label="Voice status">
+        <span class="atlas-voice-status-chip-dot" aria-hidden="true"></span>
+        <span class="atlas-voice-status-chip-text">Standby</span>
+      </button>
       <div class="atlas-ticker" id="atlas-briefing-ticker">
         <div class="atlas-ticker-track" id="atlas-briefing-ticker-track">
           <p class="atlas-ticker-text atlas-home-briefing-text" id="atlas-home-briefing-text">Loading briefing…</p>
@@ -957,7 +962,7 @@
     </header>
 
     <div class="atlas-mc-body">
-      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Projects and focus">
+      <aside class="atlas-mc-panel atlas-mc-panel-left" id="atlas-mc-panel-left" aria-label="Recent projects">
         <section class="atlas-mc-section atlas-mc-section--recent">
           <h2 class="atlas-mc-section-title" id="atlas-home-projects-heading">Recent Projects</h2>
           <div id="atlas-home-projects" class="atlas-home-projects atlas-home-recent-list"></div>
@@ -965,26 +970,55 @@
       </aside>
 
       <main class="atlas-mc-center">
-        <div class="atlas-mc-core-wrap" id="atlas-core" aria-hidden="true">
-          <canvas id="atlas-core-canvas" class="atlas-core-canvas"></canvas>
+        <div id="atlas-mc-center-controls" class="atlas-mc-center-controls">
+          <div class="atlas-mc-core-wrap" id="atlas-core" aria-hidden="true">
+            <canvas id="atlas-core-canvas" class="atlas-core-canvas"></canvas>
+          </div>
+          <h1 class="atlas-mc-title">ATLAS OS</h1>
+
+          <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
+            <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" />
+            <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </form>
+
+          <div id="atlas-home-voice-panel" class="atlas-home-voice-panel" aria-label="Voice controls">
+            <div class="atlas-home-voice-top">
+              <span id="atlas-home-voice-status" class="atlas-home-voice-status" data-status="idle">Standby</span>
+              <span id="atlas-home-voice-mic-dot" class="atlas-home-voice-mic-dot" aria-hidden="true" title="Microphone inactive"></span>
+            </div>
+            <div class="atlas-home-voice-toggles">
+              <label class="atlas-home-voice-toggle"><input type="checkbox" id="atlas-home-conv-mode" checked /> Conversation</label>
+              <label class="atlas-home-voice-toggle"><input type="checkbox" id="atlas-home-speak-replies" checked /> Speak replies</label>
+            </div>
+            <div class="atlas-home-voice-actions">
+              <button type="button" id="atlas-home-voice-restart" class="atlas-home-voice-btn">Restart</button>
+              <button type="button" id="atlas-home-voice-pause" class="atlas-home-voice-btn atlas-home-voice-btn--ghost">Pause</button>
+              <label class="atlas-home-voice-stt-label">STT
+                <select id="atlas-home-stt-mode" class="atlas-home-voice-select" aria-label="Speech-to-text mode">
+                  <option value="browser">Browser Live</option>
+                  <option value="whisper">Local Whisper</option>
+                </select>
+              </label>
+              <button type="button" id="atlas-home-voice-advanced" class="atlas-home-voice-btn atlas-home-voice-btn--ghost">Advanced</button>
+            </div>
+            <details class="atlas-home-voice-voice-row">
+              <summary>Voice settings</summary>
+              <label class="atlas-home-voice-voice-label">Voice
+                <select id="atlas-home-tts-voice" class="atlas-home-voice-select" aria-label="Text-to-speech voice"></select>
+              </label>
+            </details>
+          </div>
+
+          <section id="atlas-home-conversation" class="atlas-home-conversation" aria-label="Conversation">
+            <div id="atlas-conv-log" class="atlas-conv-log" role="log" aria-live="polite"></div>
+            <div class="atlas-conv-actions">
+              <button type="button" id="atlas-conv-clear" class="atlas-conv-btn atlas-conv-btn--ghost">Clear</button>
+              <button type="button" id="atlas-conv-open-assistant" class="atlas-conv-btn">Open Full Assistant</button>
+            </div>
+          </section>
         </div>
-        <h1 class="atlas-mc-title">ATLAS OS</h1>
-        <p class="atlas-mc-greeting atlas-home-greeting" id="atlas-home-greeting">Good evening Aurelius. What shall we build today?</p>
-
-        <div id="atlas-mc-chips" class="atlas-mc-chips" aria-label="Quick actions"></div>
-
-        <form id="atlas-home-command-form" class="atlas-mc-command" autocomplete="off">
-          <input type="text" id="atlas-home-command-input" class="atlas-mc-command-input" placeholder="Command Atlas…" aria-label="Command Atlas" />
-          <button type="submit" class="atlas-mc-command-submit" aria-label="Send command">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-          </button>
-        </form>
-
-        <button type="button" id="atlas-mc-voice-btn" class="atlas-mc-voice" aria-label="Voice Mode" title="Open Voice Mode">
-          <span class="atlas-mc-voice-ring" aria-hidden="true"></span>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-          <span class="atlas-mc-voice-label">Voice Mode</span>
-        </button>
       </main>
 
       <aside class="atlas-mc-panel atlas-mc-panel-right" aria-labelledby="atlas-home-agents-heading">
@@ -1254,24 +1288,81 @@
     <div class="atlas-voice-backdrop" data-atlas-voice-close></div>
     <div class="atlas-voice-panel">
       <header class="atlas-voice-header">
-        <h2 id="atlas-voice-title">Voice Mode</h2>
+        <h2 id="atlas-voice-title">Advanced Voice Settings</h2>
+        <span id="atlas-voice-mic-indicator" class="atlas-voice-mic-indicator" aria-hidden="true" title="Microphone inactive"></span>
         <span id="atlas-voice-status" class="atlas-voice-status" data-status="idle">Idle</span>
         <button type="button" class="atlas-voice-close" data-atlas-voice-close aria-label="Close">&times;</button>
       </header>
-      <p class="atlas-voice-privacy">Microphone activates only when you click Listen or Mic. No always-on listening in V1.</p>
-      <div id="atlas-voice-wake-indicator" class="atlas-voice-wake-indicator"></div>
-      <textarea id="atlas-voice-transcript" class="atlas-voice-transcript" rows="4" placeholder="Your speech will appear here…"></textarea>
+      <p id="atlas-voice-unsupported" class="atlas-voice-unsupported hidden">Speech recognition is not supported in this browser. Switch to Local Whisper or type commands below.</p>
+      <p id="atlas-voice-conversation-note" class="atlas-voice-wake-note">Conversation Mode: enable wake phrase for hands-free flow. Atlas stops listening while speaking.</p>
+      <p id="atlas-voice-privacy-browser" class="atlas-voice-privacy">Microphone is off until you start listening or enable Conversation Mode (wake phrase). No background listening without your action.</p>
+      <p id="atlas-voice-privacy-whisper" class="atlas-voice-privacy atlas-voice-privacy--whisper hidden">Local Whisper mode sends audio only to your local Atlas server. Audio is deleted after transcription.</p>
+      <p id="atlas-voice-whisper-setup" class="atlas-voice-setup-note hidden">Install faster-whisper from Cookbook/Dependencies or rebuild Docker with <code>INSTALL_OPTIONAL=true</code>.</p>
+      <p id="atlas-voice-wake-whisper-note" class="atlas-voice-wake-note hidden">Wake phrase with local Whisper streaming coming later. Use Browser STT for wake phrase, or record-stop in Local Whisper.</p>
+      <div class="atlas-voice-stt-mode">
+        <label>STT mode
+          <select id="atlas-voice-stt-mode" aria-label="Speech-to-text mode">
+            <option value="browser">Browser Live Mode</option>
+            <option value="whisper">Local Whisper Push-to-Talk</option>
+          </select>
+        </label>
+        <button type="button" id="atlas-voice-switch-whisper" class="atlas-voice-btn atlas-voice-btn--switch hidden">Switch to Local Whisper</button>
+      </div>
+      <div id="atlas-voice-wake-indicator" class="atlas-voice-wake-indicator" aria-live="polite"></div>
+      <details id="atlas-voice-debug-wrap" class="atlas-voice-debug-wrap">
+        <summary class="atlas-voice-debug-summary">Advanced diagnostics</summary>
+      <div id="atlas-voice-debug" class="atlas-voice-debug" aria-live="polite">
+        <div class="atlas-voice-debug-title">Voice diagnostics</div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Permission</span><code id="atlas-voice-debug-permission">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">STT API</span><code id="atlas-voice-debug-supported">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Instance</span><code id="atlas-voice-debug-instance">false</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Running</span><code id="atlas-voice-debug-running">false</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">State</span><code id="atlas-voice-debug-state">idle</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Events</span><code id="atlas-voice-debug-events">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Interim</span><code id="atlas-voice-debug-interim">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Final</span><code id="atlas-voice-debug-final">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Normalized</span><code id="atlas-voice-debug-normalized">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Wake hit</span><code id="atlas-voice-debug-wake">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Locks</span><code id="atlas-voice-debug-locks">—</code></div>
+        <div class="atlas-voice-debug-row"><span class="atlas-voice-debug-label">Error</span><code id="atlas-voice-debug-code">none</code></div>
+        <p id="atlas-voice-debug-msg" class="atlas-voice-debug-msg">No recognition errors yet.</p>
+        <div class="atlas-voice-debug-actions">
+          <button type="button" id="atlas-voice-debug-test" class="atlas-voice-btn atlas-voice-btn--ghost atlas-voice-debug-sim">Test Recognition (8s)</button>
+          <button type="button" id="atlas-voice-debug-force-cmd" class="atlas-voice-btn atlas-voice-btn--ghost atlas-voice-debug-sim">Force Command Mode</button>
+          <button type="button" id="atlas-voice-debug-simulate-wake" class="atlas-voice-btn atlas-voice-btn--ghost atlas-voice-debug-sim">Simulate Wake Phrase</button>
+          <button type="button" id="atlas-voice-fallback-whisper" class="atlas-voice-btn atlas-voice-btn--primary atlas-voice-debug-sim">Use Local Whisper Push-to-Talk</button>
+        </div>
+      </div>
+      </details>
+      <textarea id="atlas-voice-transcript" class="atlas-voice-transcript" rows="4" placeholder="Your command will appear here…" aria-label="Voice command"></textarea>
       <div class="atlas-voice-controls">
-        <button type="button" id="atlas-voice-mic-btn" class="atlas-voice-btn">Mic — Dictate</button>
-        <button type="button" id="atlas-voice-listen-mode-btn" class="atlas-voice-btn">Listening Mode</button>
-        <button type="button" id="atlas-voice-stop-btn" class="atlas-voice-btn atlas-voice-btn--ghost">Stop</button>
+        <button type="button" id="atlas-voice-ptt-btn" class="atlas-voice-btn atlas-voice-btn--ptt hidden">Click to Talk</button>
+        <button type="button" id="atlas-voice-start-btn" class="atlas-voice-btn">Start Listening</button>
+        <button type="button" id="atlas-voice-stop-btn" class="atlas-voice-btn atlas-voice-btn--ghost">Stop Listening</button>
         <button type="button" id="atlas-voice-submit-btn" class="atlas-voice-btn atlas-voice-btn--primary">Send to Assistant</button>
       </div>
       <div class="atlas-voice-settings">
-        <label class="atlas-voice-toggle"><input type="checkbox" id="atlas-voice-speak-replies" /> Speak replies</label>
-        <label>Voice <select id="atlas-voice-tts-voice"></select></label>
-        <label>Wake phrases (comma-separated) <input type="text" id="atlas-voice-wake-input" value="Atlas are you awake?, Atlas what's up?, Hey Atlas" /></label>
-        <div id="atlas-voice-wake-phrases" class="atlas-voice-wake-phrases"></div>
+        <label class="atlas-voice-toggle"><input type="checkbox" id="atlas-voice-speak-replies" checked /> Speak replies</label>
+        <label class="atlas-voice-toggle"><input type="checkbox" id="atlas-voice-auto-submit" checked /> Auto-submit after transcription</label>
+        <label class="atlas-voice-toggle atlas-voice-wake-toggle"><input type="checkbox" id="atlas-voice-wake-mode" checked /> Conversation Mode (wake phrase)</label>
+        <label class="atlas-voice-toggle"><input type="checkbox" id="atlas-voice-settings-interrupt" checked /> Allow interruption (say “stop talking”)</label>
+        <label>Voice reply style
+          <select id="atlas-voice-settings-style" aria-label="Voice reply style">
+            <option value="brief" selected>Brief</option>
+            <option value="normal">Normal</option>
+            <option value="detailed">Detailed</option>
+          </select>
+        </label>
+        <label>Voice <select id="atlas-voice-tts-voice" aria-label="Text-to-speech voice"></select></label>
+        <div class="atlas-voice-tts-sliders">
+          <label>Speed <input type="range" id="atlas-voice-tts-rate" min="0.7" max="1.3" step="0.05" value="0.8" /></label>
+          <label>Pitch <input type="range" id="atlas-voice-tts-pitch" min="0.8" max="1.2" step="0.05" value="1" /></label>
+          <button type="button" id="atlas-voice-tts-test" class="atlas-voice-btn atlas-voice-btn--ghost">Test voice</button>
+        </div>
+        <p id="atlas-voice-tts-hint" class="atlas-voice-setup-note hidden">Install additional Windows voices for better Atlas speech.</p>
+        <p class="atlas-voice-tts-future">Premium voice engine / ElevenLabs / local TTS coming later.</p>
+        <p id="atlas-voice-desktop-status" class="atlas-voice-desktop-status">Desktop Control: Disabled</p>
+        <div id="atlas-voice-wake-phrases" class="atlas-voice-wake-phrases" aria-label="Wake phrases"></div>
       </div>
     </div>
   </div>
@@ -1299,6 +1390,12 @@
          (the sidebar that shows the visible brand is hidden off-canvas on
          mobile) so the page always exposes a single level-1 heading. -->
     <h1 class="a11y-visually-hidden">Atlas</h1>
+    <div class="atlas-assistant-layout">
+    <aside id="atlas-assistant-sessions-panel" class="atlas-assistant-sessions-panel" aria-label="Conversations">
+      <button type="button" id="atlas-assistant-new-chat" class="atlas-assistant-new-chat">+ New Chat</button>
+      <div id="atlas-assistant-session-list" class="atlas-assistant-session-list"></div>
+    </aside>
+    <div class="atlas-assistant-main">
     <div class="chat-top-bar atlas-assistant-bar">
       <div class="atlas-assistant-bar-left">
         <span class="atlas-assistant-title">Assistant</span>
@@ -1515,6 +1612,8 @@
       <input type="checkbox" id="plan-toggle" style="display:none;">
     </div>
     <form id="chat-form" autocomplete="off" action="javascript:void(0);" style="display:none;"></form>
+    </div><!-- /.atlas-assistant-main -->
+    </div><!-- /.atlas-assistant-layout -->
 
     <!-- Character (custom preset) modal -->
     <div id="custom-preset-modal" class="modal hidden">

@@ -3159,6 +3159,19 @@ import { createStreamRenderer } from './streamingRenderer.js';
         _webLockRelease = null;
       }
 
+      // Notify voice assistant and other listeners that the stream finished.
+      try {
+        let responseText = accumulated || '';
+        if (!responseText && holder) {
+          const body = holder.querySelector('.body');
+          const content = body?.querySelector('.stream-content') || body;
+          responseText = content?.textContent?.trim() || '';
+        }
+        document.dispatchEvent(new CustomEvent('atlas-chat-stream-complete', {
+          detail: { sessionId: streamSessionId, text: responseText },
+        }));
+      } catch (_) {}
+
       // Refresh session list after a delay (picks up auto-generated names)
       setTimeout(() => {
         if (sessionModule && sessionModule.loadSessions) {

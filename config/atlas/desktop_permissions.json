@@ -1,0 +1,5 @@
+{
+  "desktop_commands_enabled": false,
+  "allowed_apps": ["cursor", "brave", "chrome", "explorer"],
+  "require_confirmation": true
+}

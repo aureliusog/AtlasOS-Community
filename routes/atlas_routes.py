@@ -1,10 +1,13 @@
 """Atlas OS configuration API — identity, profile, projects, agents, briefing, reports."""
 
 from typing import Any, Dict, List, Optional
+import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.atlas_agents import (
@@ -29,9 +32,27 @@ from src.atlas_config import (
 from src.atlas_pipeline import apply_action as pipeline_apply_action
 from src.atlas_pipeline import attach_report, create_item
 from src.atlas_project_index import index_all_projects, index_project, load_index, load_summary
+from src.atlas_desktop import desktop_status, queue_desktop_command
 from src.atlas_mount_workspace import bootstrap_workspace_folders, get_workspace_status
+from src.atlas_voice import get_whisper_config, transcribe_audio, whisper_available
 from src.atlas_workspace import load_workspace, relink_project, save_workspace, scan_workspace
 from src.auth_helpers import get_current_user
+from src.upload_limits import read_upload_limited
+
+logger = logging.getLogger(__name__)
+
+ATLAS_VOICE_MAX_BYTES = 25 * 1024 * 1024
+ATLAS_VOICE_ALLOWED_TYPES = {
+    "audio/webm",
+    "audio/ogg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mpeg",
+    "audio/mp4",
+    "video/webm",
+    "application/ogg",
+}
+ATLAS_VOICE_ALLOWED_EXT = {".webm", ".ogg", ".wav", ".m4a", ".mp3", ".mpeg", ".mpga"}
 
 
 class AgentRunRequest(BaseModel):
@@ -84,6 +105,11 @@ class PipelineCreateRequest(BaseModel):
 
 class PipelineActionRequest(BaseModel):
     action: str = Field(..., min_length=1, max_length=64)
+
+
+class DesktopCommandRequest(BaseModel):
+    command: str = Field(..., min_length=1, max_length=128)
+    args: Dict[str, Any] = Field(default_factory=dict)
 
 
 def _now_iso() -> str:
@@ -463,5 +489,96 @@ def setup_atlas_routes() -> APIRouter:
                     save_pipeline(items)
                     result["pipeline_item"] = item
         return result
+
+    def _voice_tmp_dir() -> Path:
+        tmp = data_dir() / "tmp_voice"
+        tmp.mkdir(parents=True, exist_ok=True)
+        return tmp
+
+    def _validate_voice_upload(upload: UploadFile) -> Optional[str]:
+        """Return error message if invalid, else None."""
+        filename = (upload.filename or "").lower()
+        ext = Path(filename).suffix
+        content_type = (upload.content_type or "").split(";", 1)[0].strip().lower()
+        if ext in ATLAS_VOICE_ALLOWED_EXT:
+            return None
+        if content_type in ATLAS_VOICE_ALLOWED_TYPES:
+            return None
+        return (
+            "Unsupported audio type. Upload webm, ogg, or wav."
+        )
+
+    @router.get("/voice/status")
+    async def voice_status(request: Request):
+        """Report whether local Whisper is available (no model load)."""
+        get_current_user(request)
+        cfg = get_whisper_config()
+        return {
+            "ok": True,
+            "whisper_available": whisper_available(),
+            "model": cfg["model"],
+            "device": cfg["device"],
+            "compute_type": cfg["compute_type"],
+        }
+
+    @router.post("/voice/transcribe")
+    async def voice_transcribe(
+        request: Request,
+        audio: UploadFile = File(...),
+        language: str = Form("en"),
+    ):
+        """Local Whisper transcription for Atlas Voice V2."""
+        get_current_user(request)
+
+        type_err = _validate_voice_upload(audio)
+        if type_err:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "unsupported_type", "message": type_err},
+            )
+
+        audio_bytes = await read_upload_limited(audio, ATLAS_VOICE_MAX_BYTES, "Audio file")
+        if not audio_bytes:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "empty_file", "message": "Empty audio file."},
+            )
+
+        ext = Path(audio.filename or "audio.webm").suffix.lower()
+        if ext not in ATLAS_VOICE_ALLOWED_EXT:
+            ext = ".webm"
+
+        tmp_path = _voice_tmp_dir() / f"{uuid.uuid4().hex}{ext}"
+        try:
+            tmp_path.write_bytes(audio_bytes)
+            result = transcribe_audio(tmp_path, language=language or "en")
+        except Exception as exc:
+            logger.error("[atlas-voice] upload transcribe failed: %s", exc, exc_info=True)
+            result = {
+                "ok": False,
+                "error": "transcription_failed",
+                "message": f"Transcription failed: {exc}",
+            }
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("[atlas-voice] could not delete temp audio %s: %s", tmp_path, exc)
+
+        if not result.get("ok"):
+            status = 501 if result.get("error") == "whisper_not_installed" else 500
+            return JSONResponse(status_code=status, content=result)
+        return result
+
+    @router.get("/desktop/status")
+    async def get_desktop_status(request: Request):
+        get_current_user(request)
+        return desktop_status()
+
+    @router.post("/desktop/command")
+    async def post_desktop_command(request: Request, body: DesktopCommandRequest):
+        """Placeholder desktop control — queues only, no shell execution in V1."""
+        get_current_user(request)
+        return queue_desktop_command(body.command, body.args)
 
     return router

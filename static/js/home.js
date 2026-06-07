@@ -17,7 +17,6 @@ import {
 import agentsOfficeModule from './agentsOffice.js';
 import atlasProjectsModule from './atlasProjects.js';
 import atlasFinanceModule from './atlasFinance.js';
-import atlasVoiceMode from './atlasVoiceMode.js';
 import atlasPipelineModule from './atlasPipeline.js';
 import atlasProjectContext from './atlasProjectContext.js';
 import atlasActiveProject from './atlasActiveProject.js';
@@ -28,18 +27,6 @@ export {
   isAtlasProjectsRoute,
   isAtlasFinanceRoute,
 } from './atlasShell.js';
-
-const CHIP_ACTIONS = [
-  { id: 'houseify', label: 'Continue Houseify', match: /houseify/i },
-  { id: 'transport', label: 'Review TransportOS', match: /transport/i },
-  {
-    id: 'cursor',
-    label: 'Create Cursor Prompt',
-    prompt: 'Help me write a precise Cursor agent prompt for a coding task. Ask what I\'m building, then output a copy-paste prompt.',
-  },
-  { id: 'briefing', label: 'Start Daily Briefing', action: 'briefing' },
-  { id: 'assistant', label: 'Open Assistant', action: 'assistant' },
-];
 
 let _deps = {};
 let _projects = [];
@@ -142,17 +129,9 @@ async function _refreshAtlasData() {
 }
 
 function _renderAll() {
-  _renderGreeting();
   _renderBriefing();
   _renderProjects();
   _renderAgents();
-}
-
-function _renderGreeting() {
-  const greet = _el('atlas-home-greeting');
-  if (!greet) return;
-  const text = (_briefing && _briefing.greeting) || 'Good evening Aurelius. What shall we build today?';
-  greet.textContent = text;
 }
 
 function _renderBriefing() {
@@ -199,14 +178,6 @@ function _renderAgents() {
       </div>
       <span class="atlas-home-agent-status atlas-home-agent-status--${_esc(a.status)}">${_statusLabel(a.status)}</span>
     </div>
-  `).join('');
-}
-
-function _renderChips() {
-  const list = _el('atlas-mc-chips');
-  if (!list) return;
-  list.innerHTML = CHIP_ACTIONS.map(a => `
-    <button type="button" class="atlas-mc-chip" data-chip-id="${_esc(a.id)}">${_esc(a.label)}</button>
   `).join('');
 }
 
@@ -262,11 +233,6 @@ function _scheduleCoreStart() {
   });
 }
 
-function _findProjectByChip(spec) {
-  if (!spec.match) return null;
-  return _projects.find(p => spec.match.test(p.id || '') || spec.match.test(p.name || ''));
-}
-
 /** Prefetch Atlas API data — safe to call multiple times. */
 export function prefetchAtlasData() {
   if (!_prefetchPromise) {
@@ -289,7 +255,6 @@ export function prefetchAtlasData() {
 /** Boot Atlas shell immediately on app init (before loadSessions). */
 export function bootAtlasHome() {
   startAtlasBackdrop();
-  _renderChips();
 
   const onHome = isAtlasHomeRoute()
     || document.body.classList.contains('atlas-view-home')
@@ -311,6 +276,7 @@ export function bootAtlasHome() {
     const home = _el('atlas-home');
     if (home) home.classList.remove('hidden');
     _scheduleCoreStart();
+    window.atlasHomeConversation?.onHomeShown?.();
   }
 }
 
@@ -340,12 +306,12 @@ export async function showHome({ skipHistory = false, replace = false } = {}) {
   if (home) home.classList.remove('hidden');
   _setNavActive('home');
   _setDockActive('home');
-  _renderChips();
   _scheduleCoreStart();
 
   if (_dataReady) _renderAll();
   await prefetchAtlasData();
   _renderAll();
+  window.atlasHomeConversation?.onHomeShown?.();
 }
 
 function _syncAgentsHistory({ skipHistory = false } = {}) {
@@ -442,30 +408,32 @@ function _openTool(id) {
   if (_deps.openTool) _deps.openTool(id);
 }
 
-function _handleChip(chipId) {
-  const spec = CHIP_ACTIONS.find(a => a.id === chipId);
-  if (!spec) return;
+async function _initVoiceModules(deps) {
+  try {
+    const voiceMod = await import('./atlasVoiceMode.js');
+    const atlasVoiceMode = voiceMod.default;
+    atlasVoiceMode.initAtlasVoiceMode({
+      showToast: deps.showToast,
+      openAssistant: deps.openAssistant,
+    });
+    window.atlasVoiceMode = atlasVoiceMode;
 
-  if (spec.action === 'briefing') {
-    const bar = _el('atlas-home-briefing');
-    if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    return;
+    if (deps.submitHomeChat) {
+      const homeConvMod = await import('./atlasHomeConversation.js');
+      const atlasHomeConversation = homeConvMod.default;
+      atlasHomeConversation.initAtlasHomeConversation({
+        submitChat: deps.submitHomeChat,
+        openFullAssistant: deps.openFullAssistant || (() => deps.openAssistant?.('', { submit: false })),
+        showToast: deps.showToast,
+      });
+      window.atlasHomeConversation = atlasHomeConversation;
+      if (window.homeModule?.isHomeActive?.()) {
+        window.atlasHomeConversation.onHomeShown?.();
+      }
+    }
+  } catch (err) {
+    console.error('[atlas-home] Voice module failed to initialize. Home will load without voice features.', err);
   }
-  if (spec.action === 'assistant') {
-    _openAssistant('', { submit: false, fresh: true });
-    return;
-  }
-  if (spec.prompt) {
-    _openAssistant(spec.prompt, { submit: false });
-    return;
-  }
-  const project = _findProjectByChip(spec);
-  if (project) {
-    const nxt = project.suggested_next_action ? ` ${project.suggested_next_action}` : '';
-    _openAssistant(`Let's work on ${project.name}.${nxt}`, { submit: false });
-    return;
-  }
-  if (_deps.showToast) _deps.showToast('Project not found in Atlas config');
 }
 
 function _bindEvents() {
@@ -473,20 +441,16 @@ function _bindEvents() {
   const cmdForm = _el('atlas-home-command-form');
 
   if (cmdForm) {
-    cmdForm.addEventListener('submit', (e) => {
+    cmdForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = (cmdInput?.value || '').trim();
       if (!text) return;
       if (cmdInput) cmdInput.value = '';
-      _openAssistant(text, { submit: true });
-    });
-  }
-
-  const voiceBtn = _el('atlas-mc-voice-btn');
-  if (voiceBtn) {
-    voiceBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      atlasVoiceMode.openVoiceMode();
+      if (window.atlasHomeConversation?.submitHomeMessage) {
+        await window.atlasHomeConversation.submitHomeMessage(text);
+      } else {
+        _openAssistant(text, { submit: true, stayOnHome: true });
+      }
     });
   }
 
@@ -508,15 +472,6 @@ function _bindEvents() {
       const card = e.target.closest('[data-project-id]');
       if (!card) return;
       atlasProjectContext.openProjectContext(card.dataset.projectId);
-    });
-  }
-
-  const chips = _el('atlas-mc-chips');
-  if (chips) {
-    chips.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-chip-id]');
-      if (!btn) return;
-      _handleChip(btn.dataset.chipId);
     });
   }
 
@@ -543,10 +498,7 @@ export function initHome(deps = {}) {
     showToast: deps.showToast,
     onPipelineUpdate: () => agentsOfficeModule.refreshAgentsOffice(),
   });
-  atlasVoiceMode.initAtlasVoiceMode({
-    showToast: deps.showToast,
-    openAssistant: deps.openAssistant,
-  });
+  void _initVoiceModules(deps);
   atlasProjectContext.initAtlasProjectContext({
     showToast: deps.showToast,
     openSummary: (id) => atlasProjectsModule.openProjectSummary?.(id),
@@ -555,7 +507,6 @@ export function initHome(deps = {}) {
   atlasActiveProject.initAtlasActiveProject({
     navigateAssistant: () => deps.openAssistant?.('', { submit: false }),
   });
-  window.atlasVoiceMode = atlasVoiceMode;
   window.atlasPipelineRefresh = () => atlasPipelineModule.renderPipeline();
   _bindEvents();
   bootAtlasHome();

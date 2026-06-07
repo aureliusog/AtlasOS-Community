@@ -4,10 +4,11 @@
 # Note: chromadb-client + fastembed moved to requirements.txt — RAG, semantic
 # memory, and tool selection are core paths, so they ship by default now.
 
-# Local speech-to-text (microphone -> text) via faster-whisper, for the
-# "local" STT provider. Runs on CPU out of the box (CTranslate2 backend, no
-# torch needed). Install if you want to dictate/transcribe with the mic
-# without sending audio to an external endpoint.
+# Local speech-to-text via faster-whisper — Assistant mic STT provider and
+# Atlas Voice V2 Local Whisper mode (POST /api/atlas/voice/transcribe).
+# Runs on CPU out of the box (CTranslate2 backend, no torch needed).
+# Docker: docker compose build --build-arg INSTALL_OPTIONAL=true
+# Env: ATLAS_WHISPER_MODEL=tiny.en ATLAS_WHISPER_DEVICE=cpu ATLAS_WHISPER_COMPUTE_TYPE=int8
 # Optional extra: install `torch` too if you have a CUDA GPU and want
 # GPU-accelerated transcription — it's auto-detected, CPU is used otherwise.
 faster-whisper

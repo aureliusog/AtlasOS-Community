@@ -38,6 +38,10 @@ services:
       - LOCALHOST_BYPASS=${LOCALHOST_BYPASS:-false}
       - ODYSSEUS_ADMIN_USER=${ODYSSEUS_ADMIN_USER:-admin}
       - ODYSSEUS_ADMIN_PASSWORD=${ODYSSEUS_ADMIN_PASSWORD:-}
+      # Atlas Voice V2 — local Whisper (install faster-whisper via optional requirements)
+      - ATLAS_WHISPER_MODEL=${ATLAS_WHISPER_MODEL:-tiny.en}
+      - ATLAS_WHISPER_DEVICE=${ATLAS_WHISPER_DEVICE:-cpu}
+      - ATLAS_WHISPER_COMPUTE_TYPE=${ATLAS_WHISPER_COMPUTE_TYPE:-int8}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - SECURE_COOKIES=${SECURE_COOKIES:-false}
       - EMBEDDING_URL=${EMBEDDING_URL:-}

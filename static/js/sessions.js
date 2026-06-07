@@ -1091,7 +1091,38 @@ function _renderSessionListImpl() {
   list.innerHTML = '';
   list.appendChild(_frag);
 
+  _renderAtlasAssistantSessionsPanel(orderedSessions);
   _postRenderSessionList(list);
+}
+
+function _renderAtlasAssistantSessionsPanel(orderedSessions) {
+  const panel = document.getElementById('atlas-assistant-session-list');
+  if (!panel) return;
+  const currentId = currentSessionId;
+  if (!orderedSessions.length) {
+    panel.innerHTML = '<p class="atlas-assistant-sessions-empty">No conversations yet.</p>';
+    return;
+  }
+  panel.innerHTML = orderedSessions.slice(0, 40).map(s => {
+    const active = s.id === currentId ? ' atlas-assistant-session-item--active' : '';
+    const ts = s.updated_at || s.created_at || '';
+    let when = '';
+    try {
+      when = ts ? new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    } catch (_) {}
+    const badge = s.active_project_id ? '<span class="atlas-assistant-session-badge">Project</span>' : '';
+    return `<button type="button" class="atlas-assistant-session-item${active}" data-atlas-session-id="${s.id}">
+      <span class="atlas-assistant-session-title">${(s.name || 'Chat').replace(/</g, '&lt;')}</span>
+      <span class="atlas-assistant-session-meta">${when}${badge}</span>
+    </button>`;
+  }).join('');
+
+  panel.querySelectorAll('[data-atlas-session-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.atlasSessionId;
+      if (id) selectSession(id, { keepSidebar: true });
+    });
+  });
 }
 
 /** Shared post-render: highlight, keyboard nav, swipe hint, drag sort */
@@ -1496,8 +1527,34 @@ export async function loadSessions() {
   }
 }
 
-export async function selectSession(id, { keepSidebar = false, skipHistory = false } = {}) {
-  if (window.homeModule && window.homeModule.hideHome) window.homeModule.hideHome();
+export async function ensureRecentSession({ stayOnHome = false } = {}) {
+  if (!sessions.length) {
+    await loadSessions();
+  }
+  const activeSessions = sessions.filter(s => !s.archived);
+  const _isTransient = (s) => !!s && (s.folder === 'Assistant' || s.folder === 'Tasks');
+  const real = activeSessions.filter(s => !_isTransient(s));
+  let targetId = null;
+  if (currentSessionId && activeSessions.some(s => s.id === currentSessionId)) {
+    targetId = currentSessionId;
+  } else {
+    const savedId = Storage.get('lastSessionId');
+    if (savedId && activeSessions.some(s => s.id === savedId) && !_isTransient(activeSessions.find(s => s.id === savedId))) {
+      targetId = savedId;
+    } else if (real.length > 0) {
+      targetId = real[0].id;
+    } else if (activeSessions.length > 0) {
+      targetId = activeSessions[0].id;
+    }
+  }
+  if (targetId && targetId !== currentSessionId) {
+    await selectSession(targetId, { keepSidebar: true, skipHistory: true, stayOnHome });
+  }
+  return currentSessionId;
+}
+
+export async function selectSession(id, { keepSidebar = false, skipHistory = false, stayOnHome = false } = {}) {
+  if (!stayOnHome && window.homeModule && window.homeModule.hideHome) window.homeModule.hideHome();
   // Exit compare mode cleanly if active
   if (window.compareModule && window.compareModule.isActive()) {
     window.compareModule.deactivate(true);
@@ -3117,6 +3174,7 @@ const sessionModule = {
   renderSessionList,
   loadSessions,
   selectSession,
+  ensureRecentSession,
   createDirectChat,
   materializePendingSession,
   hasPendingChat,

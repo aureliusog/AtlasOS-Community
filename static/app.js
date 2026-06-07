@@ -3175,8 +3175,16 @@ function initializeEventListeners() {
     });
   }
 
-  function showAssistant({ skipHistory = false, sessionId = null } = {}) {
+  async function showAssistant({ skipHistory = false, sessionId = null } = {}) {
     homeModule.showAssistantView({ dockId: 'assistant' });
+    if (sessionModule) {
+      if (sessionModule.loadSessions) await sessionModule.loadSessions();
+      if (sessionId && sessionModule.selectSession) {
+        await sessionModule.selectSession(sessionId, { keepSidebar: true, skipHistory: true });
+      } else if (sessionModule.ensureRecentSession) {
+        await sessionModule.ensureRecentSession();
+      }
+    }
     if (!skipHistory) {
       const sid = sessionId || (sessionModule && sessionModule.getCurrentSessionId
         ? sessionModule.getCurrentSessionId()
@@ -3188,8 +3196,56 @@ function initializeEventListeners() {
     }
   }
 
-  async function _openAssistantFromHome(prompt = '', { submit = false, fresh = false, skipNav = false } = {}) {
-    if (!skipNav) showAssistant();
+  function _submitHomeChat(prompt, { speak = true, voiceSettings = {} } = {}) {
+    return new Promise(async (resolve, reject) => {
+      const text = (prompt || '').trim();
+      if (!text) {
+        resolve('');
+        return;
+      }
+      try {
+        if (sessionModule?.ensureRecentSession) {
+          await sessionModule.ensureRecentSession({ stayOnHome: true });
+        }
+        const input = el('message');
+        if (input) {
+          input.value = text;
+          if (uiModule.autoResize) uiModule.autoResize(input);
+        }
+        const timeout = setTimeout(() => {
+          document.removeEventListener('atlas-chat-stream-complete', onDone);
+          resolve('');
+        }, 120000);
+        const onDone = (e) => {
+          clearTimeout(timeout);
+          document.removeEventListener('atlas-chat-stream-complete', onDone);
+          resolve(e.detail?.text || '');
+        };
+        document.addEventListener('atlas-chat-stream-complete', onDone);
+        const form = el('chat-form');
+        if (!form) {
+          clearTimeout(timeout);
+          reject(new Error('Chat form unavailable'));
+          return;
+        }
+        form.requestSubmit();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function _openAssistantFromHome(prompt = '', { submit = false, fresh = false, skipNav = false, stayOnHome = false, onComplete = null } = {}) {
+    if (stayOnHome && submit && prompt) {
+      try {
+        const reply = await _submitHomeChat(prompt);
+        if (typeof onComplete === 'function') onComplete(reply);
+      } catch (err) {
+        if (typeof onComplete === 'function') onComplete('');
+      }
+      return;
+    }
+    if (!skipNav) await showAssistant();
     else homeModule.showAssistantView({ dockId: 'assistant' });
     if (fresh) {
       _deactivateIncognito();
@@ -3208,6 +3264,14 @@ function initializeEventListeners() {
       if (uiModule.autoResize) uiModule.autoResize(input);
     }
     if (submit && prompt && input) {
+      let onStreamDone = null;
+      if (typeof onComplete === 'function') {
+        onStreamDone = (e) => {
+          document.removeEventListener('atlas-chat-stream-complete', onStreamDone);
+          onComplete(e.detail?.text || '');
+        };
+        document.addEventListener('atlas-chat-stream-complete', onStreamDone);
+      }
       const form = el('chat-form');
       if (form) form.requestSubmit();
     } else if (input) {
@@ -3222,7 +3286,6 @@ function initializeEventListeners() {
     }
     if (toolId === 'assistant') {
       showAssistant();
-      _openAssistantFromHome('', { fresh: true, skipNav: true });
       return;
     }
     if (toolId === 'agents') {
@@ -3261,11 +3324,21 @@ function initializeEventListeners() {
     navigateAssistant: () => _openAssistantFromHome('', { submit: false }),
   })).catch(() => {});
 
+  const atlasAssistantNewChat = el('atlas-assistant-new-chat');
+  if (atlasAssistantNewChat) {
+    atlasAssistantNewChat.addEventListener('click', () => {
+      const rail = el('rail-new-session');
+      if (rail) rail.click();
+    });
+  }
+
   homeModule.initHome({
     openAssistant: _openAssistantFromHome,
+    openFullAssistant: () => showAssistant(),
     openTool: _openToolFromDock,
     showToast: uiModule.showToast,
     defaultHome: false,
+    submitHomeChat: _submitHomeChat,
   });
 
   const sidebarHomeBtn = el('sidebar-home-btn');
@@ -3922,18 +3995,32 @@ function startOdysseusApp() {
         return;
       }
 
-      // If input is empty and STT is enabled, start recording
-      if (!hasText && !hasFiles && _isSttEnabled()) {
-        sendBtn.innerHTML = _stopIcon;
-        sendBtn.title = 'Stop recording';
-        sendBtn.dataset.mode = 'recording';
-        sendBtn.classList.add('recording');
-        voiceRecorderModule.startRecording(
-          (audioFile) => fileHandlerModule.addFiles([audioFile]),
-          uiModule.showToast,
-          uiModule.showError
-        );
-        return;
+      // If input is empty, open Voice Assistant (browser STT) or fall back to server STT
+      if (!hasText && !hasFiles) {
+        const browserStt = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+        if (window.atlasVoiceMode?.openVoiceMode) {
+          window.atlasVoiceMode.openVoiceMode({
+            startListening: true,
+            sttMode: browserStt ? 'browser' : 'whisper',
+          });
+          return;
+        }
+        if (_isSttEnabled()) {
+          sendBtn.innerHTML = _stopIcon;
+          sendBtn.title = 'Stop recording';
+          sendBtn.dataset.mode = 'recording';
+          sendBtn.classList.add('recording');
+          voiceRecorderModule.startRecording(
+            (audioFile) => fileHandlerModule.addFiles([audioFile]),
+            uiModule.showToast,
+            uiModule.showError
+          );
+          return;
+        }
+        if (window.atlasVoiceMode?.openVoiceMode) {
+          window.atlasVoiceMode.openVoiceMode();
+          return;
+        }
       }
 
       // Otherwise, send message

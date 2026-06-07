@@ -26,6 +26,7 @@ _CONFIG_FILES = (
     "pipeline.json",
     "workspace.json",
     "personal_finance.json",
+    "desktop_permissions.json",
 )
 
 
@@ -183,7 +184,7 @@ def load_profile_bundle() -> Dict[str, Any]:
 
 def time_aware_greeting(profile: Optional[Dict[str, Any]] = None) -> str:
     profile = profile or load_aurelius_profile()
-    name = (profile.get("name") or "Aurelius").strip()
+    address = (profile.get("address_as") or "Sir").strip()
     hour = datetime.now().hour
     if hour < 12:
         part = "morning"
@@ -191,7 +192,7 @@ def time_aware_greeting(profile: Optional[Dict[str, Any]] = None) -> str:
         part = "afternoon"
     else:
         part = "evening"
-    return f"Good {part} {name}. What shall we build today?"
+    return f"Good {part}, {address}. What shall we build today?"
 
 
 def active_focus_projects() -> List[Dict[str, Any]]:
@@ -322,14 +323,25 @@ def build_atlas_system_context() -> str:
     agents = load_agents()
     summaries = load_all_summaries(data_dir())
 
+    address = profile.get("address_as") or identity.get("address_user_as") or "Sir"
+    reply_style = identity.get("reply_style") or (
+        "Default to brief replies unless the user asks for detail. "
+        "Voice: 1–4 sentences. Text: concise but useful. "
+        "When responding by voice, be brief, natural, and refer to the user as sir "
+        "without overusing punctuation."
+    )
+
     lines = [
         "# Atlas OS Context",
         f"You are {identity.get('name', 'Atlas')}, {identity.get('role', 'a local AI operating system')}.",
         f"Mission: {identity.get('mission', '')}",
         f"Tone: {identity.get('tone', '')}",
         f"Style: {identity.get('style', '')}",
+        f"Address the user as {address} (e.g. \"Yes sir\", \"Understood, Sir\", \"Good evening, Sir\").",
+        f"Reply style: {reply_style}",
+        "Avoid long essays, generic AI waffle, overexplaining, and repeating context.",
         "",
-        f"## User: {profile.get('name', 'Aurelius')}",
+        f"## User: {profile.get('name', 'Aurelius')} ({address})",
         f"Work style: {profile.get('work_style', '')}",
         f"Current focus: {profile.get('current_focus', '')}",
         f"Deprioritise unless asked: {profile.get('ignore_for_now', '')}",
